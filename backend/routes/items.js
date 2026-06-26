@@ -41,14 +41,22 @@ async function uploadImage(file) {
 
   if (r2Enabled) {
     const key = R2_PREFIX ? `${R2_PREFIX}/${name}` : name;
-    await r2.send(
-      new PutObjectCommand({
-        Bucket: R2_BUCKET,
-        Key: key,
-        Body: file.buffer,
-        ContentType: file.mimetype,
-      })
-    );
+    try {
+      await r2.send(
+        new PutObjectCommand({
+          Bucket: R2_BUCKET,
+          Key: key,
+          Body: file.buffer,
+          ContentType: file.mimetype,
+        })
+      );
+    } catch (err) {
+      console.error('Falha no upload para o R2:', err);
+      throw new Error(
+        `Erro ao enviar a imagem para o R2 (${err.name || 'erro'}: ${err.message}). ` +
+          'Verifique as credenciais/permissoes do bucket.'
+      );
+    }
     return `${R2_PUBLIC_URL}/${key}`;
   }
 
