@@ -3,10 +3,12 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import Item from '../models/Item.js';
 import StockMovement from '../models/StockMovement.js';
 import ItemHistory from '../models/ItemHistory.js';
 import { authRequired } from '../middleware/auth.js';
+import { r2, r2Enabled, R2_BUCKET, R2_PREFIX, R2_PUBLIC_URL } from '../r2.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,14 +18,7 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadsDir),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const name = `item-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
-    cb(null, name);
-  },
-});
+const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
   if (file.mimetype.startsWith('image/')) {
@@ -38,6 +33,45 @@ const upload = multer({
   fileFilter,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
 });
+
+// Faz upload da imagem. No R2 retorna a URL publica; em dev (disco) retorna o nome do arquivo.
+async function uploadImage(file) {
+  const ext = path.extname(file.originalname);
+  const name = `item-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+
+  if (r2Enabled) {
+    const key = R2_PREFIX ? `${R2_PREFIX}/${name}` : name;
+    await r2.send(
+      new PutObjectCommand({
+        Bucket: R2_BUCKET,
+        Key: key,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+      })
+    );
+    return `${R2_PUBLIC_URL}/${key}`;
+  }
+
+  fs.writeFileSync(path.join(uploadsDir, name), file.buffer);
+  return name;
+}
+
+// Remove a imagem do storage (R2 ou disco), ignorando erros de objeto inexistente.
+async function deleteImage(foto) {
+  if (!foto) return;
+  try {
+    if (/^https?:\/\//i.test(foto)) {
+      if (!r2Enabled) return;
+      const key = foto.replace(`${R2_PUBLIC_URL}/`, '');
+      await r2.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: key }));
+    } else {
+      const p = path.join(uploadsDir, foto);
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+    }
+  } catch (err) {
+    console.error('Falha ao remover imagem:', err.message);
+  }
+}
 
 const router = Router();
 
@@ -57,11 +91,16 @@ function valorTexto(v) {
 
 function serialize(item) {
   if (!item) return item;
+  const foto = item.foto
+    ? /^https?:\/\//i.test(item.foto)
+      ? item.foto
+      : `/uploads/${item.foto}`
+    : null;
   return {
     id: item._id.toString(),
     nome: item.nome,
     qtde: item.qtde,
-    foto: item.foto ? `/uploads/${item.foto}` : null,
+    foto,
     categoria: item.categoria,
     tipoUso: item.tipoUso,
     observacoes: item.observacoes,
@@ -111,7 +150,7 @@ router.post('/', authRequired, upload.single('foto'), async (req, res, next) => 
       return res.status(400).json({ error: 'O nome e obrigatorio' });
     }
 
-    const foto = req.file ? req.file.filename : null;
+    const foto = req.file ? await uploadImage(req.file) : null;
     const item = await Item.create({
       nome: nome.trim(),
       qtde: Number(qtde) || 0,
@@ -153,12 +192,9 @@ router.put('/:id', authRequired, upload.single('foto'), async (req, res, next) =
     };
 
     if (req.file) {
-      // remove a foto antiga
-      if (existing.foto) {
-        const oldPath = path.join(uploadsDir, existing.foto);
-        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-      }
-      existing.foto = req.file.filename;
+      // remove a foto antiga e sobe a nova
+      await deleteImage(existing.foto);
+      existing.foto = await uploadImage(req.file);
     }
 
     if (nome != null) existing.nome = nome.trim();
@@ -276,10 +312,7 @@ router.delete('/:id', authRequired, async (req, res, next) => {
     const existing = await Item.findById(req.params.id);
     if (!existing) return res.status(404).json({ error: 'Item nao encontrado' });
 
-    if (existing.foto) {
-      const fotoPath = path.join(uploadsDir, existing.foto);
-      if (fs.existsSync(fotoPath)) fs.unlinkSync(fotoPath);
-    }
+    await deleteImage(existing.foto);
 
     await StockMovement.deleteMany({ item: existing._id });
     await ItemHistory.deleteMany({ item: existing._id });
