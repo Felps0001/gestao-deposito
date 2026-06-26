@@ -3,6 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import sharp from 'sharp';
 import { PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import Item from '../models/Item.js';
 import StockMovement from '../models/StockMovement.js';
@@ -36,8 +37,21 @@ const upload = multer({
 
 // Faz upload da imagem. No R2 retorna a URL publica; em dev (disco) retorna o nome do arquivo.
 async function uploadImage(file) {
-  const ext = path.extname(file.originalname);
-  const name = `item-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+  // Comprime, corrige a orientacao (EXIF) e converte para WebP para deixar a imagem mais leve
+  let buffer;
+  try {
+    buffer = await sharp(file.buffer)
+      .rotate()
+      .resize({ width: 1280, height: 1280, fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toBuffer();
+  } catch (err) {
+    console.error('Falha ao processar a imagem:', err);
+    throw new Error('Nao foi possivel processar a imagem enviada');
+  }
+
+  const name = `item-${Date.now()}-${Math.round(Math.random() * 1e9)}.webp`;
+  const contentType = 'image/webp';
 
   if (r2Enabled) {
     const key = R2_PREFIX ? `${R2_PREFIX}/${name}` : name;
@@ -46,8 +60,8 @@ async function uploadImage(file) {
         new PutObjectCommand({
           Bucket: R2_BUCKET,
           Key: key,
-          Body: file.buffer,
-          ContentType: file.mimetype,
+          Body: buffer,
+          ContentType: contentType,
         })
       );
     } catch (err) {
@@ -60,7 +74,7 @@ async function uploadImage(file) {
     return `${R2_PUBLIC_URL}/${key}`;
   }
 
-  fs.writeFileSync(path.join(uploadsDir, name), file.buffer);
+  fs.writeFileSync(path.join(uploadsDir, name), buffer);
   return name;
 }
 
