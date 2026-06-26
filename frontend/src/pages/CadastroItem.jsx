@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "../api";
 import { formatDate } from "../utils/format";
+import { mediaUrl } from "../config";
 
 const TIPOS_USO = ["Consumo", "Permanente", "Emprestimo", "Descartavel"];
 
@@ -208,7 +209,7 @@ export default function CadastroItem() {
 
         {(preview || fotoAtual) && (
           <div className="photo-preview">
-            <img src={preview || fotoAtual} alt="Pre-visualizacao" />
+            <img src={preview || mediaUrl(fotoAtual)} alt="Pre-visualizacao" />
           </div>
         )}
 

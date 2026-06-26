@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api";
 import { formatDate } from "../utils/format";
+import { mediaUrl } from "../config";
 
 export default function Catalogo() {
   const navigate = useNavigate();
@@ -96,7 +97,7 @@ export default function Catalogo() {
             <div className="card" key={item.id}>
               <div className="card-img">
                 {item.foto ? (
-                  <img src={item.foto} alt={item.nome} />
+                  <img src={mediaUrl(item.foto)} alt={item.nome} />
                 ) : (
                   <div className="no-img">Sem foto</div>
                 )}
