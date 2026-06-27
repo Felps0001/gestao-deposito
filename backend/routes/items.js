@@ -119,6 +119,12 @@ function valorTexto(v) {
   return String(v);
 }
 
+// Escapa caracteres especiais para usar texto do usuario em RegExp com seguranca
+// (evita ReDoS / injecao de regex na busca).
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function serialize(item) {
   if (!item) return item;
   // Monta a URL publica da foto a partir da chave/nome salvo (compativel com registros antigos)
@@ -155,7 +161,7 @@ router.get('/', authRequired, async (req, res, next) => {
     const filter = {};
 
     if (q) {
-      const rx = new RegExp(q, 'i');
+      const rx = new RegExp(escapeRegex(q), 'i');
       filter.$or = [{ nome: rx }, { observacoes: rx }];
     }
     if (categoria) {

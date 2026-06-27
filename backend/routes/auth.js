@@ -1,13 +1,22 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import 'dotenv/config';
+import rateLimit from 'express-rate-limit';
+import { JWT_SECRET } from '../config.js';
 import User from '../models/User.js';
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 
-router.post('/login', async (req, res, next) => {
+// Limita tentativas de login para dificultar forca bruta de senha.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 10, // 10 tentativas por IP na janela
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas tentativas de login. Tente novamente mais tarde.' },
+});
+
+router.post('/login', loginLimiter, async (req, res, next) => {
   try {
     const { username, password } = req.body || {};
 
@@ -20,16 +29,18 @@ router.post('/login', async (req, res, next) => {
       return res.status(401).json({ error: 'Credenciais invalidas' });
     }
 
-    const ok = bcrypt.compareSync(password, user.passwordHash);
+    const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) {
       return res.status(401).json({ error: 'Credenciais invalidas' });
     }
 
-    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, {
-      expiresIn: '8h',
-    });
+    const token = jwt.sign(
+      { id: user.id, username: user.username, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '8h' }
+    );
 
-    res.json({ token, user: { id: user.id, username: user.username } });
+    res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
   } catch (err) {
     next(err);
   }
