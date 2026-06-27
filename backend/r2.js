@@ -24,3 +24,10 @@ export const r2 = r2Enabled
       },
     })
   : null;
+
+if (r2Enabled && !R2_PUBLIC_URL) {
+  console.warn(
+    '[R2] ATENCAO: R2_PUBLIC_URL esta vazio. As imagens serao salvas no bucket, ' +
+      'mas nao terao uma URL valida para exibicao. Configure a URL publica (r2.dev ou dominio custom).'
+  );
+}

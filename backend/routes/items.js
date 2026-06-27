@@ -71,23 +71,31 @@ async function uploadImage(file) {
           'Verifique as credenciais/permissoes do bucket.'
       );
     }
-    return `${R2_PUBLIC_URL}/${key}`;
+    // Guarda apenas a chave do objeto; a URL publica e montada na exibicao
+    return key;
   }
 
   fs.writeFileSync(path.join(uploadsDir, name), buffer);
   return name;
 }
 
+// Normaliza o valor salvo em foto para a chave/nome do arquivo (sem dominio nem barras iniciais)
+function fotoKey(foto) {
+  if (!foto) return null;
+  return foto
+    .replace(/^https?:\/\/[^/]+\//i, '') // remove dominio de URLs antigas
+    .replace(/^\/+/, ''); // remove barras iniciais
+}
+
 // Remove a imagem do storage (R2 ou disco), ignorando erros de objeto inexistente.
 async function deleteImage(foto) {
   if (!foto) return;
+  const key = fotoKey(foto);
   try {
-    if (/^https?:\/\//i.test(foto)) {
-      if (!r2Enabled) return;
-      const key = foto.replace(`${R2_PUBLIC_URL}/`, '');
+    if (r2Enabled && key.includes('/')) {
       await r2.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: key }));
     } else {
-      const p = path.join(uploadsDir, foto);
+      const p = path.join(uploadsDir, key);
       if (fs.existsSync(p)) fs.unlinkSync(p);
     }
   } catch (err) {
@@ -113,11 +121,20 @@ function valorTexto(v) {
 
 function serialize(item) {
   if (!item) return item;
-  const foto = item.foto
-    ? /^https?:\/\//i.test(item.foto)
-      ? item.foto
-      : `/uploads/${item.foto}`
-    : null;
+  // Monta a URL publica da foto a partir da chave/nome salvo (compativel com registros antigos)
+  let foto = null;
+  if (item.foto) {
+    if (/^https?:\/\//i.test(item.foto)) {
+      foto = item.foto;
+    } else {
+      const key = item.foto.replace(/^\/+/, '');
+      foto = key.includes('/')
+        ? R2_PUBLIC_URL
+          ? `${R2_PUBLIC_URL}/${key}`
+          : `/${key}`
+        : `/uploads/${key}`;
+    }
+  }
   return {
     id: item._id.toString(),
     nome: item.nome,
