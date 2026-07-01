@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
+import mjLogo from "../assets/mj-logo.png";
 
 export default function Login() {
   const { login } = useAuth();
@@ -26,38 +27,40 @@ export default function Login() {
 
   return (
     <div className="login-page">
-      <form className="login-card" onSubmit={handleSubmit}>
-        <div className="login-logo">📦</div>
-        <h1>Gestao de Deposito</h1>
-        <p className="login-subtitle">Acesso administrativo</p>
+      <div className="login-box">
+        <img src={mjLogo} alt="MJ Eventos" className="login-logo" />
+        <form className="login-card" onSubmit={handleSubmit}>
+          <h1>Gestao de Deposito</h1>
+          <p className="login-subtitle">Acesso administrativo</p>
 
-        {error && <div className="alert alert-error">{error}</div>}
+          {error && <div className="alert alert-error">{error}</div>}
 
-        <label>
-          Usuario
-          <input
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            autoFocus
-            required
-          />
-        </label>
+          <label>
+            Usuario
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoFocus
+              required
+            />
+          </label>
 
-        <label>
-          Senha
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-        </label>
+          <label>
+            Senha
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </label>
 
-        <button className="btn btn-primary btn-block" disabled={loading}>
-          {loading ? "Entrando..." : "Entrar"}
-        </button>
-      </form>
+          <button className="btn btn-primary btn-block" disabled={loading}>
+            {loading ? "Entrando..." : "Entrar"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
